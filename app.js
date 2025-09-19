@@ -77,113 +77,183 @@ function initializeElements() {
     paymentInfoDisplay = document.getElementById('paymentInfoDisplay');
 }
 
-// Format currency
+// Format currency (Brazilian Real)
 function formatCurrency(value) {
     return new Intl.NumberFormat('pt-BR', {
         style: 'currency',
-        currency: 'BRL',
-        minimumFractionDigits: 2
+        currency: 'BRL'
     }).format(value);
 }
 
-// Update service details
-function updateServiceDetails() {
-    if (!currentService) return;
-    
-    const service = servicesData[currentService];
-    const hours = currentHours || service.minHours;
-    const subtotal = service.hourlyRate * hours;
-    
-    photosDisplay.textContent = service.photos;
-    hourlyRateDisplay.textContent = formatCurrency(service.hourlyRate);
-    hoursDisplay.textContent = hours;
-    subtotalDisplay.textContent = formatCurrency(subtotal);
-    
-    serviceDetailsSection.style.display = 'block';
-    updateFinalPrice();
-}
-
-// Update final price
-function updateFinalPrice() {
-    if (!currentService) return;
-    
-    const service = servicesData[currentService];
-    const hours = currentHours || service.minHours;
-    const subtotal = service.hourlyRate * hours;
-    const payment = paymentData[currentPayment];
-    const finalPrice = subtotal * (1 + payment.modifier);
-    
-    finalPriceDisplay.textContent = finalPrice.toLocaleString('pt-BR', {
+// Format price for display (without R$ symbol)
+function formatPrice(value) {
+    return new Intl.NumberFormat('pt-BR', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
-    });
-    
-    paymentInfoDisplay.textContent = payment.description;
-    priceResultSection.style.display = 'block';
+    }).format(value);
 }
 
 // Handle service selection
-function handleServiceSelect() {
-    const selectedValue = serviceSelect.value;
+function handleServiceChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
     
-    if (!selectedValue) {
-        currentService = null;
-        hoursInput.disabled = true;
-        hoursInput.value = '';
-        hoursInput.placeholder = 'Selecione o tipo de sessão primeiro';
-        minHoursDisplay.textContent = '-';
+    const selectedService = serviceSelect.value;
+    
+    if (!selectedService) {
+        resetCalculator();
+        return;
+    }
+    
+    currentService = servicesData[selectedService];
+    
+    // Update minimum hours
+    minHoursDisplay.textContent = currentService.minHours;
+    
+    // Enable and configure hours input
+    hoursInput.disabled = false;
+    hoursInput.min = currentService.minHours;
+    hoursInput.value = currentService.minHours;
+    hoursInput.placeholder = `Mínimo ${currentService.minHours} horas`;
+    
+    currentHours = currentService.minHours;
+    
+    // Update displays
+    updateServiceDetails();
+    calculatePrice();
+}
+
+// Handle hours change
+function handleHoursChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    if (!currentService) return;
+    
+    let hours = parseInt(hoursInput.value);
+    
+    // Validate minimum hours
+    if (hours < currentService.minHours) {
+        hours = currentService.minHours;
+        hoursInput.value = hours;
+    }
+    
+    currentHours = hours || currentService.minHours;
+    
+    updateServiceDetails();
+    calculatePrice();
+}
+
+// Handle payment method change
+function handlePaymentChange(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    currentPayment = paymentSelect.value;
+    calculatePrice();
+}
+
+// Update service details display
+function updateServiceDetails() {
+    if (!currentService) {
         serviceDetailsSection.style.display = 'none';
+        return;
+    }
+    
+    // Update all detail fields
+    photosDisplay.textContent = currentService.photos;
+    hourlyRateDisplay.textContent = formatCurrency(currentService.hourlyRate);
+    hoursDisplay.textContent = currentHours;
+    
+    const subtotalValue = currentService.hourlyRate * currentHours;
+    subtotalDisplay.textContent = formatCurrency(subtotalValue);
+    
+    serviceDetailsSection.style.display = 'block';
+}
+
+// Calculate and display final price
+function calculatePrice() {
+    if (!currentService || !currentHours) {
         priceResultSection.style.display = 'none';
         return;
     }
     
-    currentService = selectedValue;
-    const service = servicesData[selectedValue];
+    const payment = paymentData[currentPayment];
     
-    hoursInput.disabled = false;
-    hoursInput.min = service.minHours;
-    hoursInput.value = service.minHours;
-    hoursInput.placeholder = `Mínimo ${service.minHours} horas`;
-    minHoursDisplay.textContent = service.minHours;
+    // Calculate base price
+    const basePrice = currentService.hourlyRate * currentHours;
     
-    currentHours = service.minHours;
-    updateServiceDetails();
-}
-
-// Handle hours input
-function handleHoursInput() {
-    if (!currentService) return;
+    // Apply payment modifier
+    const finalPrice = basePrice + (basePrice * payment.modifier);
     
-    const service = servicesData[currentService];
-    let inputHours = parseInt(hoursInput.value);
+    // Update price display
+    finalPriceDisplay.textContent = formatPrice(finalPrice);
     
-    if (inputHours < service.minHours) {
-        inputHours = service.minHours;
-        hoursInput.value = service.minHours;
+    // Update payment info
+    let infoText = payment.description;
+    if (payment.modifier !== 0) {
+        const originalText = `Valor original: ${formatCurrency(basePrice)}`;
+        infoText = `${originalText} • ${payment.description}`;
     }
+    paymentInfoDisplay.textContent = infoText;
     
-    currentHours = inputHours;
-    updateServiceDetails();
+    priceResultSection.style.display = 'block';
 }
 
-// Handle payment selection
-function handlePaymentSelect() {
-    currentPayment = paymentSelect.value;
-    updateFinalPrice();
+// Reset calculator to initial state
+function resetCalculator() {
+    currentService = null;
+    currentHours = 0;
+    
+    // Reset hours input
+    hoursInput.disabled = true;
+    hoursInput.value = '';
+    hoursInput.placeholder = 'Selecione o tipo de sessão primeiro';
+    minHoursDisplay.textContent = '-';
+    
+    // Hide sections
+    serviceDetailsSection.style.display = 'none';
+    priceResultSection.style.display = 'none';
 }
 
 // Initialize the application
-function initApp() {
+function initializeApp() {
     initializeElements();
     
-    // Add event listeners
-    serviceSelect.addEventListener('change', handleServiceSelect);
-    hoursInput.addEventListener('input', handleHoursInput);
-    paymentSelect.addEventListener('change', handlePaymentSelect);
+    // Remove any existing event listeners to prevent duplicates
+    if (serviceSelect) {
+        serviceSelect.removeEventListener('change', handleServiceChange);
+        serviceSelect.addEventListener('change', handleServiceChange);
+    }
     
-    // Set initial payment method
-    currentPayment = paymentSelect.value;
+    if (hoursInput) {
+        hoursInput.removeEventListener('input', handleHoursChange);
+        hoursInput.removeEventListener('change', handleHoursChange);
+        hoursInput.addEventListener('input', handleHoursChange);
+        hoursInput.addEventListener('change', handleHoursChange);
+    }
+    
+    if (paymentSelect) {
+        paymentSelect.removeEventListener('change', handlePaymentChange);
+        paymentSelect.addEventListener('change', handlePaymentChange);
+    }
+    
+    // Set initial state
+    resetCalculator();
+    
+    // Set default payment method
+    if (paymentSelect) {
+        paymentSelect.value = 'pix';
+        currentPayment = 'pix';
+    }
 }
 
-// Start the app when DOM is loaded
-document.addEventListener('DOMContentLoaded', initApp);
+// Start the application when DOM is loaded
+document.addEventListener('DOMContentLoaded', initializeApp);
+
+// Also initialize if DOM is already loaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    initializeApp();
+}
